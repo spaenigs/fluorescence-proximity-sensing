@@ -1,0 +1,47 @@
+from glob import glob
+
+import pandas as pd
+
+import os
+import yaml
+
+TOKEN = config["token"]
+
+rule all:
+    input:
+        f"data/temp/{TOKEN}/linkers_appended.txt"
+
+rule append:
+    input:
+        config["dir_in"],
+        config["linker_in"]
+    output:
+        f"data/temp/{TOKEN}/linkers_appended.txt"
+    run:
+        with open(input[1]) as f:
+            data = yaml.safe_load(f)
+
+        for p in glob(input[0] + "*.csv"):
+            df = pd.read_csv(p, index_col=0)
+            df_res = pd.DataFrame()
+            for n, s in df.iterrows():
+                for k, v in data.items():
+                    if v["seq_name"] == n:
+                        df_tmp = pd.DataFrame()
+                        for vi in v.values():
+                            if type(vi) == str:
+                                continue
+                            else:
+                                tmp = pd.concat([
+                                    s.iloc[:-1].to_frame().transpose().reset_index(drop=True),
+                                    pd.DataFrame(list(vi["processed_linker"])).transpose()
+                                ], axis=1)
+                                tmp.index = [f"{n}_{k}{vi['linker']}"]
+                                tmp["y"] = vi["class"]
+                                df_tmp = pd.concat([df_tmp, tmp], axis=0)
+                        df_res = pd.concat([df_res, df_tmp])
+            df_res.to_csv(f"{config['dir_out']}/{os.path.basename(p)}")
+
+        shell("touch {output[0]}")
+
+
